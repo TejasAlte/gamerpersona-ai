@@ -1,297 +1,207 @@
-import pandas as pd
-import altair as alt
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-from spirit_engine import find_spirit
-
 import streamlit as st
-from scoring import *
-from personas import *
+import pandas as pd
+import numpy as np
+import joblib
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="GamerPersona AI", layout="centered")
+st.set_page_config(layout="wide")
 
-st.title("🎮 GamerPersona AI")
-st.subheader("Discover Your Gamer Energy")
+# ===============================
+# Load Model (Cached)
+# ===============================
 
-st.markdown("---")
+@st.cache_resource
+def load_model():
+    model = joblib.load("models/model.pkl")
+    encoders = joblib.load("models/encoders.pkl")
+    return model, encoders
 
-daily_hours = st.slider("How many hours do you game daily?", 0, 16, 4)
-years_gaming = st.slider("How many years have you been gaming?", 0, 15, 3)
-spending = st.slider("Monthly gaming spending ($)", 0, 500, 50)
-
-sleep_hours = st.slider("How many hours do you sleep?", 0, 12, 7)
-sleep_quality = st.selectbox("Sleep Quality", ["Good", "Poor", "Very Poor"])
-
-mood = st.selectbox("Your usual mood after gaming?", ["Neutral", "Anxious", "Sad"])
-withdrawal = st.checkbox("Do you feel restless when not gaming?")
-continued = st.checkbox("Do you continue gaming despite problems?")
-
-isolation = st.slider("Social isolation level (1–10)", 1, 10, 3)
-face_hours = st.slider("Face-to-face social hours per week", 0, 20, 5)
-
-exercise = st.slider("Exercise hours per week", 0, 10, 3)
+model, encoders = load_model()
 
 
+# ===============================
+# Radar Chart
+# ===============================
 
 def plot_radar(intensity, sleep, emotion, social, discipline):
-    
+
     categories = ['INTENSITY', 'SLEEP', 'EMOTION', 'SOCIAL', 'DISCIPLINE']
     values = [intensity, sleep, emotion, social, discipline]
-    
-    # Close shape
+
     values += values[:1]
-    
     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
     angles += angles[:1]
-    
-    fig, ax = plt.subplots(figsize=(6.5,6.5), subplot_kw=dict(polar=True))
-    
-    # Background
+
+    fig, ax = plt.subplots(figsize=(6,6), subplot_kw=dict(polar=True))
+
     fig.patch.set_facecolor('#0B0F19')
     ax.set_facecolor('#0B0F19')
-    
-    # 🔥 REMOVE circular frame completely
     ax.spines['polar'].set_visible(False)
-    
-    # Remove default grid
     ax.grid(False)
-    
-    # Draw pentagon grid layers (subtle)
+
     for level in [20, 40, 60, 80, 100]:
         ax.plot(angles, [level]*len(angles),
                 color='#1C2333',
                 linewidth=0.8)
-    
-    # Outer pentagon boundary (softer)
-    ax.plot(angles, [100]*len(angles),
-            color='#2EE6A6',
-            linewidth=1.8)
-    
-    # Main stat shape (softer neon)
+
     ax.plot(angles, values,
-            linewidth=2.8,
+            linewidth=2.5,
             color='#3EF0B5')
-    
+
     ax.fill(angles, values,
             color='#3EF0B5',
-            alpha=0.20)
-    
-    # Category labels
+            alpha=0.2)
+
     ax.set_xticks(angles[:-1])
     ax.set_xticklabels(categories,
                        fontsize=11,
                        fontweight='bold',
                        color='#D6E4F0')
-    
-    # Remove radial ticks
+
     ax.set_yticklabels([])
-    
     ax.set_ylim(0, 100)
-    
+
     return fig
 
 
-# def plot_radar(intensity, sleep, emotion, social, discipline):
-    
-#     categories = ['INTENSITY', 'SLEEP', 'EMOTION', 'SOCIAL', 'DISCIPLINE']
-#     values = [intensity, sleep, emotion, social, discipline]
-    
-#     # Close the shape
-#     values += values[:1]
-    
-#     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-#     angles += angles[:1]
-    
-#     fig, ax = plt.subplots(figsize=(7,7), subplot_kw=dict(polar=True))
-    
-#     # Dark gaming background
-#     fig.patch.set_facecolor('#0B0F19')
-#     ax.set_facecolor('#0B0F19')
-    
-#     # Remove default grid
-#     ax.grid(False)
-    
-#     # Draw sharp pentagon grid layers
-#     for level in [20, 40, 60, 80, 100]:
-#         ax.plot(angles, [level]*len(angles),
-#                 color='#1F2A44',
-#                 linewidth=1)
-    
-#     # Outer boundary thick
-#     ax.plot(angles, [100]*len(angles),
-#             color='#00F5FF',
-#             linewidth=2.5)
-    
-#     # Main stat shape
-#     ax.plot(angles, values,
-#             linewidth=3.5,
-#             color='#00FFAA')
-    
-#     ax.fill(angles, values,
-#             color='#00FFAA',
-#             alpha=0.25)
-    
-#     # Category labels
-#     ax.set_xticks(angles[:-1])
-#     ax.set_xticklabels(categories,
-#                        fontsize=12,
-#                        fontweight='bold',
-#                        color='white')
-    
-#     # Remove radial numbers
-#     ax.set_yticklabels([])
-    
-#     ax.set_ylim(0, 100)
-    
-#     # Add center glow effect
-#     ax.scatter(0, 0, s=200, color='#00FFAA', alpha=0.4)
-    
-#     return fig
+# ===============================
+# Sidebar Inputs
+# ===============================
+
+with st.sidebar:
+
+    st.header("🎮 Gamer Profile")
+
+    age = st.number_input("Age", 10, 60, 20)
+    # gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+    gender = st.selectbox("Gender", encoders["gender"].classes_)
+    # game_genre = st.selectbox("Game Genre", ["Mobile Games", "FPS", "RPG", "MOBA", "Battle Royale", "Sports", "Other"])
+    game_genre = st.selectbox("Game Genre", encoders["game_genre"].classes_)
+    # gaming_platform = st.selectbox("Gaming Platform", ["PC", "Console", "Mobile"])
+    gaming_platform= st.selectbox("Gaming Platform", encoders["gaming_platform"].classes_)
+    daily_hours = st.slider("Daily Gaming Hours", 0.0, 16.0, 4.0)
+    years_gaming = st.slider("Years Gaming", 0, 20, 3)
+    monthly_spending = st.slider("Monthly Game Spending (USD)", 0.0, 500.0, 50.0)
+    st.subheader("Sleep")
+    sleep_hours = st.slider("Sleep Hours", 0.0, 12.0, 7.0)
+    # sleep_quality = st.selectbox("Sleep Quality", ["Very Poor", "Poor", "Average", "Good", "Very Good"])
+    sleep_quality = st.selectbox("Sleep Quality", encoders["sleep_quality"].classes_)
+    # sleep_disruption_frequency = st.selectbox("Sleep Disruption Frequency", ["Never", "Rarely", "Sometimes", "Often"])
+    sleep_disruption_frequency = st.selectbox("Sleep Disruption Frequency", encoders["sleep_disruption_frequency"].classes_)
+
+    st.subheader("Emotional")
+    # mood_state = st.selectbox("Mood State", ["Neutral", "Happy", "Anxious", "Sad", "Irritable"])
+    mood_state = st.selectbox(
+    "Mood State",
+    encoders["mood_state"].classes_)
+    # mood_swing_frequency = st.selectbox("Mood Swing Frequency", ["Never", "Rarely", "Sometimes", "Often"])
+    mood_swing_frequency = st.selectbox("Mood Swing Frequency", encoders["mood_swing_frequency"].classes_)
+    withdrawal_symptoms = st.selectbox("Withdrawal Symptoms", [True, False])
+    loss_of_other_interests = st.selectbox("Loss of Other Interests", [True, False])
+    continued_despite_problems = st.selectbox("Continued Despite Problems", [True, False])
+
+    st.subheader("Physical")
+    eye_strain = st.selectbox("Eye Strain", [True, False])
+    back_neck_pain = st.selectbox("Back / Neck Pain", [True, False])
+    weight_change_kg = st.slider("Weight Change (kg)", -10.0, 10.0, 0.0)
+    exercise_hours_weekly = st.slider("Exercise Hours Weekly", 0.0, 15.0, 3.0)
+
+    st.subheader("Social")
+    social_isolation_score = st.slider("Social Isolation Score", 1, 10, 3)
+    face_to_face_social_hours_weekly = st.slider("Face-to-Face Social Hours Weekly", 0.0, 40.0, 10.0)
+
+    st.subheader("Academic")
+    # academic_work_performance = st.selectbox("Performance", ["Excellent", "Good", "Average", "Below Average", "Poor"])
+    academic_work_performance = st.selectbox(
+    "Performance",
+    encoders["academic_work_performance"].classes_)
+    grades_gpa = st.number_input("GPA (0–10)", 0.0, 10.0, 7.0)
+    work_productivity_score = st.slider("Work Productivity Score", 0.0, 10.0, 7.0)
 
 
-# def plot_radar(intensity, sleep, emotion, social, discipline):
-    
-#     categories = ['INTENSITY', 'SLEEP', 'EMOTION', 'SOCIAL', 'DISCIPLINE']
-#     values = [intensity, sleep, emotion, social, discipline]
-    
-#     # Close shape
-#     values += values[:1]
-    
-#     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-#     angles += angles[:1]
-    
-#     fig, ax = plt.subplots(figsize=(6,6), subplot_kw=dict(polar=True))
-    
-#     # Dark background
-#     fig.patch.set_facecolor('#0E1117')
-#     ax.set_facecolor('#0E1117')
-    
-#     # Remove circular grid
-#     ax.grid(False)
-    
-#     # Draw pentagon grid manually
-#     for i in range(20, 101, 20):
-#         ax.plot(angles, [i]*len(angles), linestyle='dashed', linewidth=0.6)
-    
-#     # Draw main pentagon
-#     # ax.plot(angles, values, linewidth=3)
-#     # ax.plot(angles, values, linewidth=3, color='#00FFAA')
-#     ax.fill(angles, values, alpha=0.4, color='#00FFAA')
-#     ax.fill(angles, values, alpha=0.3)
-    
-#     # Labels
-#     ax.set_xticks(angles[:-1])
-#     ax.set_xticklabels(categories, fontsize=11)
-    
-#     ax.set_ylim(0, 100)
-    
-#     # Remove radial labels
-#     ax.set_yticklabels([])
-    
-#     return fig
+# ===============================
+# Create Input Dict
+# ===============================
 
+user_input = {
+    "age": age,
+    "gender": gender,
+    "daily_gaming_hours": daily_hours,
+    "game_genre": game_genre,
+    "gaming_platform": gaming_platform,
+    "sleep_hours": sleep_hours,
+    "sleep_quality": sleep_quality,
+    "sleep_disruption_frequency": sleep_disruption_frequency,
+    "academic_work_performance": academic_work_performance,
+    "grades_gpa": grades_gpa,
+    "work_productivity_score": work_productivity_score,
+    "mood_state": mood_state,
+    "mood_swing_frequency": mood_swing_frequency,
+    "withdrawal_symptoms": withdrawal_symptoms,
+    "loss_of_other_interests": loss_of_other_interests,
+    "continued_despite_problems": continued_despite_problems,
+    "eye_strain": eye_strain,
+    "back_neck_pain": back_neck_pain,
+    "weight_change_kg": weight_change_kg,
+    "exercise_hours_weekly": exercise_hours_weekly,
+    "social_isolation_score": social_isolation_score,
+    "face_to_face_social_hours_weekly": face_to_face_social_hours_weekly,
+    "monthly_game_spending_usd": monthly_spending,
+    "years_gaming": years_gaming
+}
 
-# def plot_radar(intensity, sleep, emotion, social, discipline):
-    
-#     categories = ['Intensity', 'Sleep', 'Emotion', 'Social', 'Discipline']
-#     values = [intensity, sleep, emotion, social, discipline]
-    
-#     # Close the pentagon
-#     values += values[:1]
-    
-#     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-#     angles += angles[:1]
-    
-#     # fig, ax = plt.subplots(figsize=(6,6), subplot_kw=dict(polar=True))
-#     fig, ax = plt.subplots(figsize=(6,6), subplot_kw=dict(polar=True))
-#     fig.patch.set_facecolor('#0E1117')
-#     ax.set_facecolor('#0E1117')
+input_df = pd.DataFrame([user_input])
 
-    
-#     ax.plot(angles, values)
-#     ax.fill(angles, values, alpha=0.25)
-    
-#     ax.set_xticks(angles[:-1])
-#     ax.set_xticklabels(categories)
-    
-#     ax.set_ylim(0, 100)
-    
-#     return fig
+# Ensure correct column order
+model_features = model.feature_names_in_
+input_df = input_df[model_features]
 
+# Encode categorical
+for col, encoder in encoders.items():
+    if col in input_df.columns:
+        input_df[col] = encoder.transform(input_df[col])
 
+# ===============================
+# Predict
+# ===============================
 
-if st.button("Reveal My Gamer Persona 🔮"):
-    
-    intensity = gaming_intensity(daily_hours, years_gaming, spending)
-    sleep_score = sleep_balance(sleep_hours, sleep_quality)
-    emotion = emotional_drift(mood, withdrawal, continued)
-    social = social_energy(isolation, face_hours)
-    discipline = life_discipline(exercise)
-    
-    balance = balance_index([intensity, sleep_score, emotion, social, discipline])
-    
-    persona = get_persona(intensity, sleep_score, emotion, social)
+prediction = model.predict(input_df)[0]
+probabilities = model.predict_proba(input_df)[0]
 
-    st.markdown("---")
-    st.header(persona)
-    
-    st.subheader(f"🌌 Your Gamer Balance Index: {round(balance,1)} / 100")
-    
-    st.write("### 🪞 Personalized Insight")
+risk_label = encoders["gaming_addiction_risk_level"].classes_[prediction]
 
-    insight = ""
+# ===============================
+# MAIN DISPLAY
+# ===============================
 
-    if intensity > 70:
-        insight += "Your gaming intensity is high, suggesting strong immersion and engagement. "
+st.title("🎮 GamerPersona AI")
+st.subheader("ML-Powered Behavioral Insight")
 
-    if sleep_score < 50:
-        insight += "Your sleep balance appears strained, possibly due to late-night sessions. "
+st.markdown("---")
 
-    if emotion > 60:
-        insight += "Emotional drift signals that gaming may be influencing your mood cycles. "
+st.header("🎯 Addiction Risk Prediction")
+st.subheader(f"Predicted Level: {risk_label}")
 
-    if social < 50:
-        insight += "Your social energy suggests digital interaction may be replacing real-world connections. "
+classes = encoders["gaming_addiction_risk_level"].classes_
 
-    if discipline < 50:
-        insight += "Life discipline indicators show room for healthier routine alignment. "
+prob_df = pd.DataFrame({
+    "Risk Level": classes,
+    "Probability": probabilities
+})
 
-    if insight == "":
-        insight = "Your gaming habits appear relatively balanced with your real-life systems."
+st.write("### Risk Distribution")
+st.bar_chart(prob_df.set_index("Risk Level"))
 
-    st.write(insight)
+# ===============================
+# Pentagon Stats
+# ===============================
 
+intensity = daily_hours * 6
+sleep_score = 100 - abs(7 - sleep_hours) * 12
+emotion_score = 70 if mood_state in ["Anxious", "Sad"] else 40
+social_score = 100 - (social_isolation_score * 8)
+discipline_score = exercise_hours_weekly * 10
 
-    user_vector = [intensity, sleep_score, emotion, social, discipline]
-
-    spirit_name, spirit_description = find_spirit(user_vector)
-
-    st.markdown("---")
-    st.header("🧬 Your Spirit Alignment")
-    st.subheader(spirit_name)
-    st.write(spirit_description)
-
-
-
-    st.write("### 🎯 Your Energy Map")
-
-    data = pd.DataFrame({
-        'Category': ['Intensity', 'Sleep', 'Emotion', 'Social', 'Discipline'],
-        'Score': [intensity, sleep_score, emotion, social, discipline]
-    })
-
-    chart = alt.Chart(data).mark_line(point=True).encode(
-        x=alt.X('Category', sort=None),
-        y=alt.Y('Score', scale=alt.Scale(domain=[0, 100]))
-    )
-
-    st.altair_chart(chart, use_container_width=True)
-
-    st.write("### 🌌 Your Energy Pentagon")
-
-    radar_chart = plot_radar(intensity, sleep_score, emotion, social, discipline)
-
-    st.pyplot(radar_chart)
-
+st.write("### 🌌 Behavioral Energy Map")
+radar = plot_radar(intensity, sleep_score, emotion_score, social_score, discipline_score)
+st.pyplot(radar)

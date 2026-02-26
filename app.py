@@ -1,297 +1,271 @@
-import pandas as pd
-import altair as alt
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-from spirit_engine import find_spirit
+# ============================================
+# GAMER BEHAVIOR ANALYSIS & RISK AI PLATFORM
+# ============================================
 
 import streamlit as st
-from scoring import *
-from personas import *
+import pandas as pd
+import numpy as np
+import joblib
+import matplotlib.pyplot as plt
+from sklearn.metrics.pairwise import cosine_similarity
 
-st.set_page_config(page_title="GamerPersona AI", layout="centered")
+# ============================================
+# CONFIGURATION
+# ============================================
 
-st.title("🎮 GamerPersona AI")
-st.subheader("Discover Your Gamer Energy")
+st.set_page_config(
+    page_title="Gamer Behavior AI Analyzer",
+    page_icon="🎮",
+    layout="wide"
+)
 
-st.markdown("---")
+# ============================================
+# MODEL LOADING
+# ============================================
 
-daily_hours = st.slider("How many hours do you game daily?", 0, 16, 4)
-years_gaming = st.slider("How many years have you been gaming?", 0, 15, 3)
-spending = st.slider("Monthly gaming spending ($)", 0, 500, 50)
+@st.cache_resource
+def load_models():
+    addiction_package = joblib.load("gaming_addiction_model.pkl")
+    strain_package = joblib.load("gaming_physical_strain_model.pkl")
 
-sleep_hours = st.slider("How many hours do you sleep?", 0, 12, 7)
-sleep_quality = st.selectbox("Sleep Quality", ["Good", "Poor", "Very Poor"])
-
-mood = st.selectbox("Your usual mood after gaming?", ["Neutral", "Anxious", "Sad"])
-withdrawal = st.checkbox("Do you feel restless when not gaming?")
-continued = st.checkbox("Do you continue gaming despite problems?")
-
-isolation = st.slider("Social isolation level (1–10)", 1, 10, 3)
-face_hours = st.slider("Face-to-face social hours per week", 0, 20, 5)
-
-exercise = st.slider("Exercise hours per week", 0, 10, 3)
-
-
-
-def plot_radar(intensity, sleep, emotion, social, discipline):
-    
-    categories = ['INTENSITY', 'SLEEP', 'EMOTION', 'SOCIAL', 'DISCIPLINE']
-    values = [intensity, sleep, emotion, social, discipline]
-    
-    # Close shape
-    values += values[:1]
-    
-    angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-    angles += angles[:1]
-    
-    fig, ax = plt.subplots(figsize=(6.5,6.5), subplot_kw=dict(polar=True))
-    
-    # Background
-    fig.patch.set_facecolor('#0B0F19')
-    ax.set_facecolor('#0B0F19')
-    
-    # 🔥 REMOVE circular frame completely
-    ax.spines['polar'].set_visible(False)
-    
-    # Remove default grid
-    ax.grid(False)
-    
-    # Draw pentagon grid layers (subtle)
-    for level in [20, 40, 60, 80, 100]:
-        ax.plot(angles, [level]*len(angles),
-                color='#1C2333',
-                linewidth=0.8)
-    
-    # Outer pentagon boundary (softer)
-    ax.plot(angles, [100]*len(angles),
-            color='#2EE6A6',
-            linewidth=1.8)
-    
-    # Main stat shape (softer neon)
-    ax.plot(angles, values,
-            linewidth=2.8,
-            color='#3EF0B5')
-    
-    ax.fill(angles, values,
-            color='#3EF0B5',
-            alpha=0.20)
-    
-    # Category labels
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(categories,
-                       fontsize=11,
-                       fontweight='bold',
-                       color='#D6E4F0')
-    
-    # Remove radial ticks
-    ax.set_yticklabels([])
-    
-    ax.set_ylim(0, 100)
-    
-    return fig
-
-
-# def plot_radar(intensity, sleep, emotion, social, discipline):
-    
-#     categories = ['INTENSITY', 'SLEEP', 'EMOTION', 'SOCIAL', 'DISCIPLINE']
-#     values = [intensity, sleep, emotion, social, discipline]
-    
-#     # Close the shape
-#     values += values[:1]
-    
-#     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-#     angles += angles[:1]
-    
-#     fig, ax = plt.subplots(figsize=(7,7), subplot_kw=dict(polar=True))
-    
-#     # Dark gaming background
-#     fig.patch.set_facecolor('#0B0F19')
-#     ax.set_facecolor('#0B0F19')
-    
-#     # Remove default grid
-#     ax.grid(False)
-    
-#     # Draw sharp pentagon grid layers
-#     for level in [20, 40, 60, 80, 100]:
-#         ax.plot(angles, [level]*len(angles),
-#                 color='#1F2A44',
-#                 linewidth=1)
-    
-#     # Outer boundary thick
-#     ax.plot(angles, [100]*len(angles),
-#             color='#00F5FF',
-#             linewidth=2.5)
-    
-#     # Main stat shape
-#     ax.plot(angles, values,
-#             linewidth=3.5,
-#             color='#00FFAA')
-    
-#     ax.fill(angles, values,
-#             color='#00FFAA',
-#             alpha=0.25)
-    
-#     # Category labels
-#     ax.set_xticks(angles[:-1])
-#     ax.set_xticklabels(categories,
-#                        fontsize=12,
-#                        fontweight='bold',
-#                        color='white')
-    
-#     # Remove radial numbers
-#     ax.set_yticklabels([])
-    
-#     ax.set_ylim(0, 100)
-    
-#     # Add center glow effect
-#     ax.scatter(0, 0, s=200, color='#00FFAA', alpha=0.4)
-    
-#     return fig
-
-
-# def plot_radar(intensity, sleep, emotion, social, discipline):
-    
-#     categories = ['INTENSITY', 'SLEEP', 'EMOTION', 'SOCIAL', 'DISCIPLINE']
-#     values = [intensity, sleep, emotion, social, discipline]
-    
-#     # Close shape
-#     values += values[:1]
-    
-#     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-#     angles += angles[:1]
-    
-#     fig, ax = plt.subplots(figsize=(6,6), subplot_kw=dict(polar=True))
-    
-#     # Dark background
-#     fig.patch.set_facecolor('#0E1117')
-#     ax.set_facecolor('#0E1117')
-    
-#     # Remove circular grid
-#     ax.grid(False)
-    
-#     # Draw pentagon grid manually
-#     for i in range(20, 101, 20):
-#         ax.plot(angles, [i]*len(angles), linestyle='dashed', linewidth=0.6)
-    
-#     # Draw main pentagon
-#     # ax.plot(angles, values, linewidth=3)
-#     # ax.plot(angles, values, linewidth=3, color='#00FFAA')
-#     ax.fill(angles, values, alpha=0.4, color='#00FFAA')
-#     ax.fill(angles, values, alpha=0.3)
-    
-#     # Labels
-#     ax.set_xticks(angles[:-1])
-#     ax.set_xticklabels(categories, fontsize=11)
-    
-#     ax.set_ylim(0, 100)
-    
-#     # Remove radial labels
-#     ax.set_yticklabels([])
-    
-#     return fig
-
-
-# def plot_radar(intensity, sleep, emotion, social, discipline):
-    
-#     categories = ['Intensity', 'Sleep', 'Emotion', 'Social', 'Discipline']
-#     values = [intensity, sleep, emotion, social, discipline]
-    
-#     # Close the pentagon
-#     values += values[:1]
-    
-#     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-#     angles += angles[:1]
-    
-#     # fig, ax = plt.subplots(figsize=(6,6), subplot_kw=dict(polar=True))
-#     fig, ax = plt.subplots(figsize=(6,6), subplot_kw=dict(polar=True))
-#     fig.patch.set_facecolor('#0E1117')
-#     ax.set_facecolor('#0E1117')
-
-    
-#     ax.plot(angles, values)
-#     ax.fill(angles, values, alpha=0.25)
-    
-#     ax.set_xticks(angles[:-1])
-#     ax.set_xticklabels(categories)
-    
-#     ax.set_ylim(0, 100)
-    
-#     return fig
-
-
-
-if st.button("Reveal My Gamer Persona 🔮"):
-    
-    intensity = gaming_intensity(daily_hours, years_gaming, spending)
-    sleep_score = sleep_balance(sleep_hours, sleep_quality)
-    emotion = emotional_drift(mood, withdrawal, continued)
-    social = social_energy(isolation, face_hours)
-    discipline = life_discipline(exercise)
-    
-    balance = balance_index([intensity, sleep_score, emotion, social, discipline])
-    
-    persona = get_persona(intensity, sleep_score, emotion, social)
-
-    st.markdown("---")
-    st.header(persona)
-    
-    st.subheader(f"🌌 Your Gamer Balance Index: {round(balance,1)} / 100")
-    
-    st.write("### 🪞 Personalized Insight")
-
-    insight = ""
-
-    if intensity > 70:
-        insight += "Your gaming intensity is high, suggesting strong immersion and engagement. "
-
-    if sleep_score < 50:
-        insight += "Your sleep balance appears strained, possibly due to late-night sessions. "
-
-    if emotion > 60:
-        insight += "Emotional drift signals that gaming may be influencing your mood cycles. "
-
-    if social < 50:
-        insight += "Your social energy suggests digital interaction may be replacing real-world connections. "
-
-    if discipline < 50:
-        insight += "Life discipline indicators show room for healthier routine alignment. "
-
-    if insight == "":
-        insight = "Your gaming habits appear relatively balanced with your real-life systems."
-
-    st.write(insight)
-
-
-    user_vector = [intensity, sleep_score, emotion, social, discipline]
-
-    spirit_name, spirit_description = find_spirit(user_vector)
-
-    st.markdown("---")
-    st.header("🧬 Your Spirit Alignment")
-    st.subheader(spirit_name)
-    st.write(spirit_description)
-
-
-
-    st.write("### 🎯 Your Energy Map")
-
-    data = pd.DataFrame({
-        'Category': ['Intensity', 'Sleep', 'Emotion', 'Social', 'Discipline'],
-        'Score': [intensity, sleep_score, emotion, social, discipline]
-    })
-
-    chart = alt.Chart(data).mark_line(point=True).encode(
-        x=alt.X('Category', sort=None),
-        y=alt.Y('Score', scale=alt.Scale(domain=[0, 100]))
+    return (
+        addiction_package["model"],
+        addiction_package["features"],
+        strain_package["model"],
+        strain_package["features"]
     )
 
-    st.altair_chart(chart, use_container_width=True)
+addiction_model, addiction_features, strain_model, strain_features = load_models()
 
-    st.write("### 🌌 Your Energy Pentagon")
+# ============================================
+# SPIRIT ANIMAL DATABASE
+# ============================================
 
-    radar_chart = plot_radar(intensity, sleep_score, emotion, social, discipline)
+spirit_animals = {
+    "Wolf": {"traits": [0.80,0.75,0.70,0.90,0.75,0.60],
+             "archetype":"Strategic Pack Leader",
+             "description":"Driven, loyal, thrives in structured teamwork."},
 
-    st.pyplot(radar_chart)
+    "Falcon": {"traits":[0.90,0.85,0.70,0.40,0.80,0.75],
+               "archetype":"Precision Hunter",
+               "description":"Focused and fast decision-maker."},
 
+    "Cheetah":{"traits":[0.98,0.60,0.50,0.30,0.70,0.85],
+               "archetype":"Burst Performer",
+               "description":"Explosive energy with fast recovery."},
+
+    "Elephant":{"traits":[0.60,0.85,0.95,0.90,0.55,0.80],
+                "archetype":"Enduring Pillar",
+                "description":"Stable and resilient."},
+
+    "Phoenix":{"traits":[0.85,0.90,0.95,0.60,0.95,1.00],
+               "archetype":"Rebirth Warrior",
+               "description":"Rises stronger after setbacks."},
+
+    "Owl":{"traits":[0.55,0.80,0.50,0.30,0.85,0.60],
+           "archetype":"Nocturnal Strategist",
+           "description":"Calm, analytical and thrives at night."}
+}
+
+# ============================================
+# UTILITY FUNCTIONS
+# ============================================
+
+def build_feature_dataframe(user_dict, feature_order):
+    df = pd.DataFrame([user_dict])
+    df = df.reindex(columns=feature_order, fill_value=0)
+    return df
+
+def interpret_risk(label):
+    mapping = {
+        0: ("Low", "Low behavioral risk detected."),
+        1: ("Moderate", "Moderate signs of behavioral dependency."),
+        2: ("High", "High addiction risk. Lifestyle intervention recommended.")
+    }
+    return mapping.get(label, ("Unknown", "Unable to determine risk level."))
+
+def build_user_traits(gaming, sleep, exercise, isolation, health_risk):
+    intensity = min(gaming/10,1)
+    discipline = min(sleep/8,1)
+    endurance = min(exercise/7,1)
+    sociality = 1 - min(isolation/10,1)
+    adaptability = 1 - min(health_risk,1)
+    recovery = min(sleep/9,1)
+
+    return np.array([[intensity, discipline, endurance,
+                      sociality, adaptability, recovery]])
+
+def match_spirit_animal(user_vector):
+    names = []
+    vectors = []
+
+    for name,data in spirit_animals.items():
+        names.append(name)
+        vectors.append(data["traits"])
+
+    sims = cosine_similarity(user_vector, np.array(vectors))[0]
+    top_idx = sims.argsort()[::-1][:3]
+
+    results = []
+    for idx in top_idx:
+        results.append({
+            "animal": names[idx],
+            "score": round(float(sims[idx]),3),
+            "archetype": spirit_animals[names[idx]]["archetype"],
+            "description": spirit_animals[names[idx]]["description"]
+        })
+    return results
+
+def plot_radar(traits):
+    labels = ["Intensity","Discipline","Endurance",
+              "Sociality","Adaptability","Recovery"]
+
+    values = traits.flatten().tolist()
+    values += values[:1]
+
+    angles = np.linspace(0,2*np.pi,len(labels),endpoint=False).tolist()
+    angles += angles[:1]
+
+    fig = plt.figure(figsize=(6,6))
+    ax = fig.add_subplot(111, polar=True)
+    ax.plot(angles, values)
+    ax.fill(angles, values, alpha=0.25)
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0,1)
+
+    return fig
+
+# ============================================
+# UI
+# ============================================
+
+st.title("🎮 Gamer Behavior Analysis & Addiction Risk AI")
+st.markdown("AI-powered behavioral and health risk assessment system.")
+
+with st.sidebar:
+    st.header("User Input")
+
+    gaming_hours = st.slider("Daily Gaming Hours", 0, 12, 4)
+    spending = st.number_input("Monthly Game Spending ($)", 0, 1000, 50)
+    sleep_hours = st.slider("Sleep Hours", 0, 12, 7)
+    exercise_hours = st.slider("Exercise Hours Weekly", 0, 14, 3)
+    social_isolation = st.slider("Social Isolation Score", 0, 10, 4)
+
+    analyze = st.button("Analyze")
+
+    if gaming_hours > 10:
+        st.warning("Extreme gaming duration detected.")
+    if sleep_hours < 4:
+        st.warning("Severely low sleep detected.")
+
+# ============================================
+# MAIN ANALYSIS
+# ============================================
+
+if analyze:
+
+    user_data = {
+        "daily_gaming_hours": gaming_hours,
+        "monthly_game_spending_usd": spending,
+        "sleep_hours": sleep_hours,
+        "exercise_hours_weekly": exercise_hours,
+        "social_isolation_score": social_isolation
+    }
+
+    addiction_input = build_feature_dataframe(user_data, addiction_features)
+    strain_input = build_feature_dataframe(user_data, strain_features)
+
+    addiction_pred = addiction_model.predict(addiction_input)[0]
+    strain_pred = strain_model.predict(strain_input)[0]
+
+    addiction_label, addiction_msg = interpret_risk(addiction_pred)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Addiction Risk", addiction_label)
+
+    with col2:
+        st.metric("Eye Strain Risk", "Yes" if strain_pred[0]==1 else "No")
+
+    with col3:
+        st.metric("Back/Neck Pain Risk", "Yes" if strain_pred[1]==1 else "No")
+
+    st.markdown("---")
+
+    # st.subheader("Risk Interpretation")
+    # st.info(addiction_msg)
+
+    # st.write("Raw Prediction:", addiction_pred)
+    # st.write("Prediction Type:", type(addiction_pred))
+    # def interpret_addiction_risk(prediction):
+    #     pred = str(prediction).lower()
+
+    #     if "low" in pred or pred == "0":
+    #         return "Low", "green"
+    #     elif "moderate" in pred or pred == "1":
+    #         return "Moderate", "orange"
+    #     elif "high" in pred or pred == "2":
+    #         return "High", "red"
+    #     else:
+    #         return "Unknown", "gray"
+    # risk_label, risk_color = interpret_addiction_risk(addiction_pred)
+    # st.metric("Addiction Risk Level", risk_label)
+
+    def interpret_addiction_risk(prediction):
+        pred = str(prediction).strip().lower()
+
+        if pred == "low":
+            return "Low", "green", "Minimal behavioral risk."
+        
+        elif pred == "moderate":
+            return "Moderate", "orange", "Noticeable behavioral dependence developing."
+        
+        elif pred == "high":
+            return "High", "red", "Strong signs of addiction-related behavior."
+        
+        elif pred == "severe":
+            return "Severe", "darkred", "Critical addiction risk. Immediate lifestyle intervention recommended."
+        
+        else:
+            return "Unknown", "gray", "Model returned an unexpected value."
+
+    risk_label, risk_color, risk_text = interpret_addiction_risk(addiction_pred)
+    st.metric("Addiction Risk Level", risk_label)
+    st.caption(risk_text)
+
+
+    # Spirit Animal Section
+    health_risk_score = int(strain_pred[0]) + int(strain_pred[1])
+    traits = build_user_traits(
+        gaming_hours,
+        sleep_hours,
+        exercise_hours,
+        social_isolation,
+        health_risk_score
+    )
+
+    matches = match_spirit_animal(traits)
+
+    st.subheader("Spirit Animal Archetype")
+    for match in matches:
+        st.markdown(f"### {match['animal']} ({match['score']})")
+        st.write(match["archetype"])
+        st.write(match["description"])
+
+    st.subheader("Behavioral Radar Profile")
+    fig = plot_radar(traits)
+    st.pyplot(fig)
+
+    st.subheader("Recommendations")
+
+    if addiction_label == "High":
+        st.warning("Reduce gaming hours and improve sleep hygiene.")
+    elif addiction_label == "Moderate":
+        st.info("Monitor gaming behavior and maintain balance.")
+    else:
+        st.success("Healthy behavioral patterns detected.")
+
+st.markdown("---")
+st.markdown("Developed by Tejas Alte")
